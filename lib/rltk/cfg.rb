@@ -1,10 +1,16 @@
 # encoding: utf-8
 
-# Author:		Chris Wailes <chris.wailes@gmail.com>
-# Project: 	Ruby Language Toolkit
-# Date:		2011/03/24
-# Description:	This file contains the a class representing a context-free
-#			grammar.
+# Author:      Chris Wailes <chris.wailes+rltk@gmail.com>
+# Project:     Ruby Language Toolkit
+# Date:        2011/03/24
+# Description: This file contains the a class representing a context-free
+#              grammar.
+
+#########
+# Notes #
+#########
+
+# FIXME: Catch and handle the case where multiple selectors are used on the same symbol (e.g. A COMMA ..B)
 
 ############
 # Requires #
@@ -30,13 +36,13 @@ module RLTK
 	# used to manipulate arbitrary CFGs.
 	class CFG
 
-		# @return [Symbol] The grammar's starting symbol.
+		# @return [Symbol]  The grammar's starting symbol.
 		attr_reader :start_symbol
 
 		# This is used by the {CFG#production} method to wrap {CFG#clause}
 		# calls.
 		#
-		# @return [Symbol] The current left-hand side symbol.
+		# @return [Symbol]  The current left-hand side symbol.
 		attr_accessor :curr_lhs
 
 		#################
@@ -46,7 +52,7 @@ module RLTK
 		# Tests to see if a symbol is a terminal symbol, as used by the CFG
 		# class.
 		#
-		# @param [Symbol] sym The symbol to test.
+		# @param [Symbol]  sym  The symbol to test.
 		#
 		# @return [Boolean]
 		def self.is_terminal?(sym)
@@ -56,7 +62,7 @@ module RLTK
 		# Tests to see if a symbol is a non-terminal symbol, as used by the
 		# CFG class.
 		#
-		# @param [Symbol] sym The symbol to test.
+		# @param [Symbol]  sym  The symbol to test.
 		#
 		# @return [Boolean]
 		def self.is_nonterminal?(sym)
@@ -71,7 +77,7 @@ module RLTK
 		# programmer of the generation of new productions due to EBNF
 		# operators.
 		#
-		# @param [Proc] callback A Proc object to be called when EBNF operators are expanded.
+		# @param [Proc]  callback  A Proc object to be called when EBNF operators are expanded.
 		def initialize(&callback)
 			@curr_lhs           = nil
 			@callback           = callback || Proc.new {}
@@ -93,13 +99,39 @@ module RLTK
 
 		# Adds *production* to the appropriate internal data structures.
 		#
-		# @param [Production] production The production to add to the grammar.
+		# @param [Production]  production  The production to add to the grammar.
 		#
 		# @return [void]
 		def add_production(production)
 			@productions_sym[production.lhs] << (@productions_id[production.id] = production)
 
 			production
+		end
+
+		# Builds a production representing a (possibly empty) list of tokens.
+		# These tokens may optionally be separated by a provided token.  This
+		# function is used to eliminate the EBNF * operator.
+		#
+		# @param [Symbol]                         name           The name of the production to add
+		# @param [String, Symbol, Array<String>]  list_elements  Expression(s) that may appear in the list
+		# @param [Symbol, String]                 separator      The list separator symbol or symbols
+		#
+		# @return [void]
+		def list(name, list_elements, separator: '')
+			self.build_list_production(name, list_elements, separator, true)
+		end
+
+		# Builds a production representing a non-empty list of tokens.  These
+		# tokens may optionally be separated by a provided token.  This
+		# function is used to eliminate the EBNF + operator.
+		#
+		# @param [Symbol]                                 name           The name of the production to add
+		# @param [String, Symbol, Array<String, Symbol>]  list_elements  Expression(s) that may appear in the list
+		# @param [Symbol, String]                         separator      The list separator symbol or symbols
+		#
+		# @return [void]
+		def nonempty_list(name, list_elements, separator: '')
+			self.build_list_production(name, list_elements, separator, false)
 		end
 
 		# If the production already exists it will be returned.  If it does not
@@ -115,7 +147,7 @@ module RLTK
 				name
 
 			else
-				build_list_production(name, list_elements, separator)
+				self.build_list_production(name, list_elements, separator, true)
 			end
 		end
 		alias :get_list :get_list_production
@@ -129,27 +161,27 @@ module RLTK
 		# @param [Symbol, String]                 separator      The list separator symbol or symbols
 		#
 		# @return [void]
-		def build_list_production(name, list_elements, separator = '')
-			# Add the items for the following productions:
-			#
-			# name: | name_prime
+#		def build_list_production(name, list_elements, separator = '')
+#			# Add the items for the following productions:
+#			#
+#			# name: | name_prime
 
-			name_prime = "#{name}_prime".to_sym
+#			name_prime = "#{name}_prime".to_sym
 
-			# 1st Production
-			production, _ = self.production(name, '')
-			@callback.call(:elp, :empty, production)
+#			# 1st Production
+#			production, _ = self.production(name, '')
+#			@callback.call(:elp, :empty, production)
 
-			# 2nd Production
-			production, _ = self.production(name, name_prime)
-			@callback.call(:elp, :nonempty, production)
+#			# 2nd Production
+#			production, _ = self.production(name, name_prime)
+#			@callback.call(:elp, :nonempty, production)
 
-			# Add remaining productions via nonempty_list helper.
-			self.nonempty_list(name_prime, list_elements, separator)
+#			# Add remaining productions via nonempty_list helper.
+#			self.nonempty_list(name_prime, list_elements, separator)
 
-			name
-		end
-		alias :list :build_list_production
+#			name
+#		end
+#		alias :list :build_list_production
 
 		# If the production already exists it will be returned.  If it does not
 		# exist then it will be created and then returned.
@@ -164,72 +196,109 @@ module RLTK
 				name
 
 			else
-				build_nonempty_list_production(name, list_elements, separator)
+				self.build_list_production(name, list_elements, separator, false)
 			end
 		end
 		alias :get_nonempty_list :get_nonempty_list_production
 
-		# Builds a production representing a non-empty list of tokens.  These
-		# tokens may optionally be separated by a provided token.  This
-		# function is used to eliminate the EBNF + operator.
+		# Builds either an empty or non-empty list production.  These tokens
+		# may optionally be separated by a provided token.  This function is
+		# used to eliminate the EBNF + and * operators.
 		#
 		# @param [Symbol]                                 name           The name of the production to add
 		# @param [String, Symbol, Array<String, Symbol>]  list_elements  Expression(s) that may appear in the list
 		# @param [Symbol, String]                         separator      The list separator symbol or symbols
+		# @param [Boolean]                                empty          If the list may be empty or not
 		#
 		# @return [void]
-		def build_nonempty_list_production(name, list_elements, separator = '')
+		def build_list_production(name, list_elements, separator, empty)
 			# Add the items for the following productions:
 			#
 			# If there is only one list element:
 			#
+			#   # For non-empty lists
 			#   name: list_element | name separator list_element
+			#
+			#   # For empty lists
+			#   name: ɛ | name separator list_element
 			#
 			# else
 			#
+			#   # For non-empty lists
 			#   name: name_list_elements | name separator name_list_elements
 			#
 			#   name_list_elements: #{list_elements.join('|')}
+			#
+			#   # For empty lists
+			#   name: ɛ | name separator name_list_elements
+			#
+			#   name_list_elements: #{list_elements.join('|')}
 
-			build_elements_productions = false
+			if separator != '' and empty
+				# Add the items for the following productions:
+				#
+				# name: | name_prime
 
-			list_element_string =
-			if list_elements.is_a?(Array)
-				if list_elements.empty?
-					raise ArgumentError, 'Parameter list_elements must not be empty.'
+				name_prime = "#{name}_prime".to_sym
 
-				elsif list_elements.length == 1
-					list_elements.first
+				# 1st Production
+				production, _ = self.production(name, '')
+				@callback.call(:list, :empty_wrapper, production) # FIXME []
 
-				else
-					build_elements_productions = true
-					"#{name}_list_elements"
-				end
+				# 2nd Production
+				production, _ = self.production(name, name_prime)
+				@callback.call(:list, :nonempty_wrapper, production) # FIXME xs
+
+				# Add remaining productions via nonempty_list helper.
+				self.build_list_production(name_prime, list_elements, separator, false)
 			else
-				list_elements
-			end
 
-			list_element_selected_string = list_element_string.to_s.split.map { |s| ".#{s}" }.join(' ')
+				build_elements_productions = false
 
-			# Single Element Production
-			production, _ = self.production(name, list_element_string)
-			@callback.call(:nelp, :single, production)
+				list_element_string =
+				if list_elements.is_a?(Array)
+					if list_elements.empty?
+						raise ArgumentError,
+							  'Parameter list_elements must not be empty.'
 
-			# Multiple Element Production
-			production, selections = self.production(name, ".#{name} #{separator} #{list_element_selected_string}")
-			@callback.call(:nelp, :multiple, production, selections)
+					elsif list_elements.length == 1
+						list_elements.first
 
-			if build_elements_productions
-				# List Element Productions
-				list_elements.each do |element|
-					production, _ = self.production(list_element_string, element)
-					@callback.call(:nelp, :elements, production)
+					else
+						build_elements_productions = true
+						"#{name}_list_elements"
+					end
+				else
+					list_elements
+				end
+
+				list_element_selected_string = list_element_string.to_s.split.map { |s| ".#{s}" }.join(' ')
+
+				if empty
+					# Empty Production
+					production, _ = self.production(name, '')
+					@callback.call(:list, :empty, production)  # FIXME []
+				else
+					# Single Element Production
+					production, _ = self.production(name, list_element_string)
+					@callback.call(:list, :single, production)  # FIXME [x]
+				end
+
+				# Multiple Element Production
+				production, selections = self.production(name, ".#{name} #{separator} #{list_element_selected_string}")
+				@callback.call(:list, :multiple, production, selections) # FIXME xs + [x]
+
+				if build_elements_productions
+					# List Element Productions
+					list_elements.each do |element|
+						production, _ = self.production(list_element_string, element)
+						@callback.call(:list, :elements, production) # FIXME x
+					end
 				end
 			end
 
 			name
 		end
-		alias :nonempty_list :build_nonempty_list_production
 
 		# If the production already exists it will be returned.  If it does not
 		# exist then it will be created and then returned.
@@ -279,7 +348,7 @@ module RLTK
 
 		# Sets the EBNF callback to *callback*.
 		#
-		# @param [Proc] callback A Proc object to be called when EBNF operators are expanded and list productions are added.
+		# @param [Proc]  callback  A Proc object to be called when EBNF operators are expanded and list productions are added.
 		#
 		# @return [void]
 		def callback(&callback)
@@ -293,7 +362,7 @@ module RLTK
 		# CFG.production call's argument.  This is the function that is
 		# responsible for removing EBNF symbols from the grammar.
 		#
-		# @param [String, Symbol] expression The right-hand side of a CFG production.
+		# @param [String, Symbol]  expression  The right-hand side of a CFG production.
 		#
 		# @return [Array(Production, Array<Integer>)]
 		def clause(expression)
@@ -319,8 +388,8 @@ module RLTK
 					# Add this symbol to the correct collection.
 					(ttype0 == :TERM ? @terms : @nonterms) << tvalue0
 
+					rhs <<
 					if i + 1 < tokens.length
-						rhs <<
 						case tokens[i + 1].type
 						when :QUESTION then self.get_optional_production("#{tvalue0.downcase}_optional".to_sym, tvalue0)
 						when :STAR     then self.get_list_production("#{tvalue0.downcase}_list".to_sym, tvalue0)
@@ -328,7 +397,7 @@ module RLTK
 						else                tvalue0
 						end
 					else
-						rhs << tvalue0
+						tvalue0
 					end
 
 					symbol_count += 1
@@ -361,8 +430,8 @@ module RLTK
 			if sentence.is_a?(Symbol)
 				first_set_prime(sentence)
 
-			elsif sentence.inject(true) { |m, sym| m and self.symbols.include?(sym) }
-				set0 = []
+			elsif sentence.all? { |sym| self.symbols.include? sym }
+				set0           = []
 				all_have_empty = true
 
 				sentence.each do |sym|
@@ -509,6 +578,7 @@ module RLTK
 				@production_buffer.clone
 			end
 
+			# Restore the lhs in case it was changed.
 			@curr_lhs = prev_lhs
 			return ret_val
 		end
@@ -573,9 +643,9 @@ module RLTK
 			# @param [Symbol]         lhs  Left-hand side of the production.
 			# @param [Array<Symbol>]  rhs  Right-hand side of the production.
 			def initialize(id, lhs, rhs)
-				@id	= id
-				@lhs	= lhs
-				@rhs	= rhs
+				@id  = id
+				@lhs = lhs
+				@rhs = rhs
 			end
 
 			# Comparese on production to another.  Returns true only if the
@@ -585,7 +655,8 @@ module RLTK
 			#
 			# @return [Boolean]
 			def ==(other)
-				self.lhs == other.lhs and self.rhs == other.rhs
+				self.lhs == other.lhs and
+				self.rhs == other.rhs
 			end
 
 			# @return [Production]  A new copy of this production.
@@ -638,7 +709,9 @@ module RLTK
 			#
 			# @return [Boolean]
 			def ==(other)
-				self.dot == other.dot and self.lhs == other.lhs and self.rhs == other.rhs
+				self.dot == other.dot and
+				self.lhs == other.lhs and
+				self.rhs == other.rhs
 			end
 
 			# Moves the items dot forward by one if the end of the right-hand

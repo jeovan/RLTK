@@ -237,7 +237,7 @@ class ASTNodeTester < Minitest::Test
 
 		assert_equal(CNode.new, replace_node)
 
-		@tree5.map! do |c|
+		mapped_tree = @tree5.map! do |c|
 			c.str += '!'
 
 			c
